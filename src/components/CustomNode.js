@@ -3,7 +3,7 @@ import { Handle, Position } from 'reactflow';
 import 'reactflow/dist/style.css'; 
 
 const CustomNode = ({ data }) => {
-  const { title, url, note, images, files, isHighlighted, darkMode, onDelete, createdAt } = data;
+  const { title, url, note, images, files, isHighlighted, darkMode, onDelete } = data;
   const [showPreview, setShowPreview] = useState(false);
   const [previewLoaded, setPreviewLoaded] = useState(false);
 
