@@ -8,10 +8,42 @@ import ReactFlow, {
   addEdge,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
+import axios from 'axios';
+import { CustomNode, NodeModal, TopBar } from './components'; 
 
-import { CustomNode, NodeModal, TopBar } from './components'; // Import components
+// API Configuration
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+const USER_ID = process.env.REACT_APP_USER_ID || 'default_user'; // You can make this dynamic based on auth
 
-// Initial nodes, now with some additional nodes for linking
+const api = axios.create({
+  baseURL: API_BASE_URL,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
+
+// API Service Functions
+const flowAPI = {
+  saveFlow: (userId, nodes, edges, theme) =>
+    api.post('/api/flow/save', { user_id: userId, nodes, edges, theme }),
+  
+  loadFlow: (userId) =>
+    api.get(`/api/flow/load/${userId}`),
+  
+  addNode: (userId, node) =>
+    api.post('/api/flow/node', { user_id: userId, node }),
+  
+  deleteNode: (userId, nodeId) =>
+    api.delete(`/api/flow/node/${userId}/${nodeId}`),
+  
+  deleteFlow: (userId) =>
+    api.delete(`/api/flow/${userId}`),
+
+  healthCheck: () =>
+    api.get('/health'),
+};
+
+// Initial nodes, now with some additional nodes for linking (fallback data)
 const initialNodes = [
   {
     id: '1',
@@ -70,9 +102,9 @@ const initialNodes = [
   },
 ];
 
-// Initial edges to demonstrate linking
+// Initial edges to demonstrate linking (fallback data)
 const initialEdges = [
-  { id: 'e1-2', source: '1', target: '2', animated: true, label: 'example link' },
+  { id: 'e1-2', source: '1', target: '2' },
   { id: 'e1-3', source: '1', target: '3' },
 ];
 
@@ -87,6 +119,9 @@ function App() {
   const [modalOpen, setModalOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [darkMode, setDarkMode] = useState(false);
+  const [isOnline, setIsOnline] = useState(true);
+  const [isLoading, setIsLoading] = useState(true);
+  const [saveStatus, setSaveStatus] = useState('saved'); // 'saving', 'saved', 'error'
   const [formData, setFormData] = useState({
     title: '',
     url: '',
@@ -95,38 +130,120 @@ function App() {
     files: [],
   });
 
-  // Load data and theme from localStorage on component mount
-  useEffect(() => {
+  // Check backend connection
+  const checkBackendConnection = useCallback(async () => {
     try {
-      const savedNodes = JSON.parse(localStorage.getItem('reactflow-nodes')) || initialNodes;
-      const savedEdges = JSON.parse(localStorage.getItem('reactflow-edges')) || initialEdges;
-      const savedTheme = localStorage.getItem('reactflow-theme') === 'dark';
-
-      setNodes(savedNodes.map(node => ({ ...node, data: { ...node.data, darkMode: savedTheme } })));
-      setEdges(savedEdges);
-      setDarkMode(savedTheme);
-
-      const maxNodeId = savedNodes.reduce((max, node) => Math.max(max, parseInt(node.id, 10)), 0);
-      setId(maxNodeId + 1);
+      await flowAPI.healthCheck();
+      setIsOnline(true);
+      return true;
     } catch (error) {
-      console.error("Failed to load from localStorage, using initial data:", error);
-      setNodes(initialNodes.map(node => ({ ...node, data: { ...node.data, darkMode: false } })));
-      setEdges(initialEdges);
-      setDarkMode(false);
+      console.warn('Backend connection failed, using localStorage fallback:', error);
+      setIsOnline(false);
+      return false;
     }
   }, []);
 
-  // Save nodes and edges to localStorage whenever they change
-  const saveFlowData = useCallback(() => {
-    localStorage.setItem('reactflow-nodes', JSON.stringify(nodes));
-    localStorage.setItem('reactflow-edges', JSON.stringify(edges));
-    localStorage.setItem('reactflow-theme', darkMode ? 'dark' : 'light');
-    console.log('Nodes, edges, and theme saved to localStorage.');
-  }, [nodes, edges, darkMode]);
-
+  // Load data from backend or localStorage fallback
   useEffect(() => {
-    saveFlowData();
-  }, [saveFlowData]);
+      const loadData = async () => {
+      setIsLoading(true); // Start loading state
+      try {
+        const backendOnline = await checkBackendConnection(); // Check if the backend is available
+
+        if (backendOnline) {
+          // Backend is online, fetch data from API
+          const response = await flowAPI.loadFlow(USER_ID); // API call to get flow data
+          const { nodes: loadedNodes, edges: loadedEdges, theme } = response.data;
+
+          if (loadedNodes.length > 0) {
+            // If nodes are found, process them
+            setNodes(
+              loadedNodes.map(node => ({
+                ...node,
+                data: { ...node.data, darkMode: theme === 'dark' }
+              }))
+            );
+            setEdges(loadedEdges);
+            setDarkMode(theme === 'dark');
+
+            // Get the maximum node id and set it for future nodes
+            const maxNodeId = loadedNodes.reduce(
+              (max, node) => Math.max(max, parseInt(node.id, 10)),
+              0
+            );
+            setId(maxNodeId + 1);
+          } else {
+            // No data from backend, fallback to initial data
+            setNodes(initialNodes.map(node => ({
+              ...node,
+              data: { ...node.data, darkMode: false }
+            })));
+            setEdges(initialEdges);
+            setDarkMode(false);
+          }
+        } else {
+          // If backend is offline, log the error and use initial/empty data
+          console.error("Backend is unavailable, using initial data.");
+          setNodes(initialNodes.map(node => ({
+            ...node,
+            data: { ...node.data, darkMode: false }
+          })));
+          setEdges(initialEdges);
+          setDarkMode(false);
+        }
+      } catch (error) {
+        console.error("Error loading data from API:", error);
+        // In case of any error, fallback to initial/empty data
+        setNodes(initialNodes.map(node => ({
+          ...node,
+          data: { ...node.data, darkMode: false }
+        })));
+        setEdges(initialEdges);
+        setDarkMode(false);
+      } finally {
+        setIsLoading(false); // Stop loading state after completion
+      }
+    };
+
+
+    loadData();
+  }, [checkBackendConnection]);
+
+  // Save data to backend or localStorage
+      const saveFlowData = useCallback(async () => {
+      if (nodes.length === 0) return; // Don't save empty data during initial load
+      // const backendOnline = await checkBackendConnection();
+      setSaveStatus('saving'); // Set saving status
+
+      try {
+        if (isOnline) {
+          // Attempt to save to the backend via API
+          await flowAPI.saveFlow(USER_ID, nodes, edges, darkMode ? 'dark' : 'light');
+          setSaveStatus('saved');
+          console.log('Flow data saved to backend');
+        } else {
+          // Backend is offline, handle error gracefully (no fallback to localStorage)
+          throw new Error("Backend is offline. Cannot save data.");
+        }
+      } catch (error) {
+        console.error('Failed to save flow data:', error);
+        setSaveStatus('error');
+        // Optionally, you can show a user-friendly message here
+        alert('Failed to save data. Please try again when the backend is available.');
+      }
+    }, [nodes, edges, darkMode, isOnline]);
+
+
+  // Auto-save with debouncing
+  useEffect(() => {
+    if (isLoading) return; // Don't save during initial load
+    
+    const saveTimeout = setTimeout(() => {
+      saveFlowData();
+    }, 2000); // Save 2 seconds after last change
+
+    return () => clearTimeout(saveTimeout);
+  }, [saveFlowData, isLoading]);
 
   const handleInputChange = useCallback((e) => {
     setFormData((prev) => ({ ...prev, [e.target.name]: e.target.value }));
@@ -192,6 +309,7 @@ function App() {
   }, []);
 
   const handleSubmit = useCallback((e) => {
+    // e.preventDefault();
 
     const newNode = {
       id: `${id}`,
@@ -299,14 +417,45 @@ function App() {
   );
 
   const handleDeleteNode = useCallback(
-    (nodeId) => {
+    async (nodeId) => {
+      // Optimistically update UI
       setNodes((prevNodes) => prevNodes.filter((node) => node.id !== nodeId));
       setEdges((prevEdges) =>
         prevEdges.filter((edge) => edge.source !== nodeId && edge.target !== nodeId)
       );
+
+      // Try to delete from backend
+      if (isOnline) {
+        try {
+          await flowAPI.deleteNode(USER_ID, nodeId);
+          console.log(`Node ${nodeId} deleted from backend`);
+        } catch (error) {
+          console.error('Failed to delete node from backend:', error);
+          // UI is already updated, so no rollback needed
+        }
+      }
     },
-    []
+    [isOnline]
   );
+
+  // Manual save function (for save button if needed)
+  const handleManualSave = useCallback(async () => {
+    await saveFlowData();
+  }, [saveFlowData]);
+
+  // Retry connection function
+  const retryConnection = useCallback(async () => {
+    const connected = await checkBackendConnection();
+    if (connected) {
+      // Try to sync local data to backend
+      try {
+        await flowAPI.saveFlow(USER_ID, nodes, edges, darkMode ? 'dark' : 'light');
+        console.log('Local data synced to backend after reconnection');
+      } catch (error) {
+        console.error('Failed to sync local data to backend:', error);
+      }
+    }
+  }, [checkBackendConnection, nodes, edges, darkMode]);
 
   // Theme styles (moved here as they depend on darkMode state in App)
   const appBackground = darkMode ? '#222' : '#f0f0f0';
@@ -322,6 +471,27 @@ function App() {
   const buttonColorPrimary = 'white';
   const buttonColorSecondary = darkMode ? '#eee' : '#333';
 
+  // Loading screen
+  if (isLoading) {
+    return (
+      <div style={{ 
+        width: '100vw', 
+        height: '100vh', 
+        display: 'flex', 
+        justifyContent: 'center', 
+        alignItems: 'center',
+        backgroundColor: appBackground,
+        color: darkMode ? '#eee' : '#333'
+      }}>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ fontSize: '18px', marginBottom: '10px' }}>Loading...</div>
+          <div style={{ fontSize: '14px', opacity: 0.7 }}>
+            {isOnline ? 'Connecting to backend...' : 'Loading from local storage...'}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={{ width: '100vw', height: '100vh', position: 'relative', backgroundColor: appBackground, transition: 'background-color 0.3s ease' }}>
@@ -334,6 +504,11 @@ function App() {
           setModalOpen={setModalOpen}
           toggleDarkMode={toggleDarkMode}
           darkMode={darkMode}
+          // Connection status props
+          isOnline={isOnline}
+          saveStatus={saveStatus}
+          onManualSave={handleManualSave}
+          onRetryConnection={retryConnection}
           // Pass theme styles to TopBar
           topBarBackground={topBarBackground}
           topBarColor={topBarColor}
@@ -385,7 +560,7 @@ function App() {
           onConnect={onConnect}
           fitView
           minZoom={0.3} 
-          maxZoom={4} // You can also adjust maxZoom if needed, default is 2
+          maxZoom={4}
           style={{ backgroundColor: appBackground }}
         >
           <Controls style={{
