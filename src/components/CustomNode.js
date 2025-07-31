@@ -1,6 +1,29 @@
-import  { useState } from 'react';
+import { useState } from 'react';
 import { Handle, Position } from 'reactflow';
-import 'reactflow/dist/style.css'; 
+import 'reactflow/dist/style.css';
+
+// Simple markdown parser for basic formatting
+const parseMarkdown = (text) => {
+  if (!text) return text;
+  
+  return text
+    // Bold: **text** or __text__
+    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+    .replace(/__(.*?)__/g, '<strong>$1</strong>')
+    // Italic: *text* or _text_
+    .replace(/\*(.*?)\*/g, '<em>$1</em>')
+    .replace(/_(.*?)_/g, '<em>$1</em>')
+    // Code: `code`
+    .replace(/`(.*?)`/g, '<code style="background-color: rgba(0,0,0,0.1); padding: 2px 4px; border-radius: 3px; font-family: monospace;">$1</code>')
+    // Links: [text](url)
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer" style="color: inherit; text-decoration: underline;">$1</a>')
+    // Headers: # ## ###
+    .replace(/^### (.*$)/gm, '<h3 style="margin: 8px 0 4px 0; font-size: 14px; font-weight: bold;">$1</h3>')
+    .replace(/^## (.*$)/gm, '<h2 style="margin: 10px 0 5px 0; font-size: 16px; font-weight: bold;">$1</h2>')
+    .replace(/^# (.*$)/gm, '<h1 style="margin: 12px 0 6px 0; font-size: 18px; font-weight: bold;">$1</h1>')
+    // Line breaks
+    .replace(/\n/g, '<br>');
+}; 
 
 const CustomNode = ({ data }) => {
   const { title, url, note, images, files, isHighlighted, darkMode, onDelete } = data;
@@ -30,6 +53,7 @@ const CustomNode = ({ data }) => {
       : '0 2px 8px rgba(0,0,0,0.1)',
     transition: 'all 0.3s ease',
     position: 'relative',
+    cursor: 'pointer',
   };
 
   const linkStyles = {
@@ -134,10 +158,43 @@ const CustomNode = ({ data }) => {
     fontSize: '14px',
   };
 
+  // YouTube helper functions
+  const isYouTubeUrl = (inputUrl) => {
+    if (!inputUrl) return false;
+    const youtubePatterns = [
+      /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/i,
+      /youtube\.com\/watch\?v=([^"&?\/\s]{11})/i,
+      /youtu\.be\/([^"&?\/\s]{11})/i
+    ];
+    return youtubePatterns.some(pattern => pattern.test(inputUrl));
+  };
+
+  const getYouTubeVideoId = (inputUrl) => {
+    if (!inputUrl) return null;
+    const patterns = [
+      /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/i,
+      /youtube\.com\/watch\?v=([^"&?\/\s]{11})/i,
+      /youtu\.be\/([^"&?\/\s]{11})/i
+    ];
+    
+    for (const pattern of patterns) {
+      const match = inputUrl.match(pattern);
+      if (match) return match[1];
+    }
+    return null;
+  };
+
+  const getYouTubeThumbnail = (videoId) => {
+    if (!videoId) return null;
+    return `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`;
+  };
+
   const handleUrlMouseEnter = () => {
     if (url && (url.startsWith('http://') || url.startsWith('https://') || url.includes('.'))) {
-      setShowPreview(true);
-      setPreviewLoaded(false);
+      if (!isYouTubeUrl(url)) { // Don't show iframe preview for YouTube videos
+        setShowPreview(true);
+        setPreviewLoaded(false);
+      }
     }
   };
 
@@ -180,12 +237,231 @@ const CustomNode = ({ data }) => {
     });
   };
 
+  // Function to open node content in a new window
+  const openNodeInNewWindow = (e) => {
+    e.stopPropagation();
+    
+    const windowFeatures = 'width=800,height=600,scrollbars=yes,resizable=yes,menubar=no,toolbar=no,location=no,status=no';
+    const newWindow = window.open('', '_blank', windowFeatures);
+    
+    if (newWindow) {
+      const htmlContent = `
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>${title || 'Node Content'}</title>
+          <style>
+            body {
+              font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+              margin: 0;
+              padding: 20px;
+              background-color: ${darkMode ? '#1a1a1a' : '#ffffff'};
+              color: ${darkMode ? '#e0e0e0' : '#333333'};
+              line-height: 1.6;
+            }
+            .container {
+              max-width: 800px;
+              margin: 0 auto;
+            }
+            .header {
+              border-bottom: 2px solid ${darkMode ? '#333' : '#eee'};
+              padding-bottom: 20px;
+              margin-bottom: 20px;
+            }
+            .title {
+              font-size: 24px;
+              font-weight: bold;
+              margin: 0 0 10px 0;
+              color: ${darkMode ? '#ffffff' : '#222'};
+            }
+            .url {
+              color: ${darkMode ? '#88ccff' : '#0066cc'};
+              text-decoration: none;
+              word-break: break-all;
+              font-size: 14px;
+            }
+            .url:hover {
+              text-decoration: underline;
+            }
+            .note {
+              background-color: ${darkMode ? '#2a2a2a' : '#f8f9fa'};
+              padding: 15px;
+              border-radius: 8px;
+              margin: 20px 0;
+              white-space: normal;
+              border-left: 4px solid ${darkMode ? '#555' : '#007bff'};
+              line-height: 1.6;
+            }
+            .note h1, .note h2, .note h3 {
+              margin-top: 16px;
+              margin-bottom: 8px;
+              color: ${darkMode ? '#ffffff' : '#222'};
+            }
+            .note h1 { font-size: 20px; }
+            .note h2 { font-size: 18px; }
+            .note h3 { font-size: 16px; }
+            .note code {
+              background-color: ${darkMode ? '#1a1a1a' : '#f1f3f4'} !important;
+              color: ${darkMode ? '#e0e0e0' : '#333'};
+              border: 1px solid ${darkMode ? '#444' : '#ddd'};
+            }
+            .note a {
+              color: ${darkMode ? '#88ccff' : '#0066cc'} !important;
+            }
+            .note a:hover {
+              color: ${darkMode ? '#aaddff' : '#0044aa'} !important;
+            }
+            .images-grid {
+              display: grid;
+              grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+              gap: 15px;
+              margin: 20px 0;
+            }
+            .image-container {
+              border-radius: 8px;
+              overflow: hidden;
+              border: 1px solid ${darkMode ? '#444' : '#ddd'};
+            }
+            .image-container img {
+              width: 100%;
+              height: 200px;
+              object-fit: cover;
+              display: block;
+            }
+            .youtube-thumbnail {
+              position: relative;
+              cursor: pointer;
+            }
+            .youtube-play-button {
+              position: absolute;
+              top: 50%;
+              left: 50%;
+              transform: translate(-50%, -50%);
+              background: rgba(0, 0, 0, 0.8);
+              border-radius: 50%;
+              width: 60px;
+              height: 60px;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              color: white;
+              font-size: 24px;
+            }
+            .files-section {
+              margin-top: 20px;
+              padding-top: 20px;
+              border-top: 1px solid ${darkMode ? '#333' : '#eee'};
+            }
+            .files-title {
+              font-weight: bold;
+              margin-bottom: 10px;
+              color: ${darkMode ? '#ccc' : '#444'};
+            }
+            .file-item {
+              display: block;
+              padding: 8px 12px;
+              margin: 5px 0;
+              background-color: ${darkMode ? '#2a2a2a' : '#f1f3f4'};
+              border-radius: 6px;
+              text-decoration: none;
+              color: ${darkMode ? '#88ccff' : '#0066cc'};
+              transition: background-color 0.2s;
+            }
+            .file-item:hover {
+              background-color: ${darkMode ? '#333' : '#e8f0fe'};
+            }
+            .timestamp {
+              text-align: center;
+              font-size: 12px;
+              color: ${darkMode ? '#999' : '#888'};
+              margin-top: 30px;
+              padding-top: 20px;
+              border-top: 1px solid ${darkMode ? '#333' : '#eee'};
+              font-style: italic;
+            }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="header">
+              ${title ? `<h1 class="title">${title}</h1>` : ''}
+              ${url ? `<a href="${formatUrl(url)}" target="_blank" class="url">${url}</a>` : ''}
+            </div>
+            
+            ${images && images.length > 0 ? `
+              <div class="images-grid">
+                ${images.map((imgSrc, index) => `
+                  <div class="image-container">
+                    <img src="${imgSrc}" alt="Image ${index + 1}" onerror="this.parentElement.style.display='none'">
+                  </div>
+                `).join('')}
+              </div>
+            ` : ''}
+            
+            ${url && isYouTubeUrl(url) ? `
+              <div class="images-grid">
+                <div class="image-container youtube-thumbnail" onclick="window.open('${formatUrl(url)}', '_blank')">
+                  <img src="${getYouTubeThumbnail(getYouTubeVideoId(url))}" alt="YouTube Thumbnail">
+                  <div class="youtube-play-button">▶</div>
+                </div>
+              </div>
+            ` : ''}
+            
+            ${files && files.length > 0 ? `
+              <div class="files-section">
+                <div class="files-title">Attachments:</div>
+                ${files.map((file, index) => `
+                  <a href="${file.dataURL}" download="${file.name}" class="file-item">
+                    📄 ${file.name} (${Math.round(file.size / 1024)} KB)
+                  </a>
+                `).join('')}
+              </div>
+            ` : ''}
+
+            ${note ? `<div class="note">${note}</div>` : ''}
+            
+            <div class="timestamp">
+              Created ${getCurrentDate()}
+            </div>
+          </div>
+        </body>
+        </html>
+      `;
+      
+      newWindow.document.write(htmlContent);
+      newWindow.document.close();
+    }
+  };
+
+  // Get all images including YouTube thumbnail
+  const getAllImages = () => {
+    const allImages = [...(images || [])];
+    
+    // Add YouTube thumbnail if URL is a YouTube video
+    if (url && isYouTubeUrl(url)) {
+      const videoId = getYouTubeVideoId(url);
+      if (videoId) {
+        allImages.unshift(getYouTubeThumbnail(videoId)); // Add at beginning
+      }
+    }
+    
+    return allImages;
+  };
+
+  const allImages = getAllImages();
+  const youtubeVideoId = url ? getYouTubeVideoId(url) : null;
+
   return (
-    <div style={nodeStyles}>
+    <div style={nodeStyles} onClick={openNodeInNewWindow}>
       {/* Delete Button */}
       {onDelete && (
         <button
-          onClick={onDelete}
+          onClick={(e) => {
+            e.stopPropagation();
+            onDelete();
+          }}
           style={deleteButtonStyles}
           title="Delete Node"
         >
@@ -194,7 +470,7 @@ const CustomNode = ({ data }) => {
       )}
 
       {/* URL Preview */}
-      {url && showPreview && (
+      {url && showPreview && !isYouTubeUrl(url) && (
         <div style={previewStyles}>
           <div style={previewHeaderStyles}>
             <span>Preview: {getDomainFromUrl(url)}</span>
@@ -232,48 +508,82 @@ const CustomNode = ({ data }) => {
       {/* Target Handle (left side) */}
       <Handle type="target" position={Position.Left} id="b" style={{ background: '#555' }} />
 
-      {/* Image Display: 2x2 Grid Layout */}
-      {images && images.length > 0 && (
+      {/* Image Display: 2x2 Grid Layout with YouTube Thumbnail */}
+      {allImages && allImages.length > 0 && (
         <div style={{ marginBottom: '8px' }}>
           <div
             style={{
               display: 'grid',
               gridTemplateColumns: 'repeat(2, 1fr)',
-              gridTemplateRows: images.length === 1 ? '1fr' : 'repeat(2, 80px)',
+              gridTemplateRows: allImages.length === 1 ? '1fr' : 'repeat(2, 80px)',
               gap: '4px',
               marginBottom: '4px',
             }}
           >
-            {images.slice(0, 4).map((imgSrc, index) => (
-              <div
-                key={index}
-                style={{
-                  position: 'relative',
-                  width: '100%',
-                  height: images.length === 1 ? '120px' : '80px',
-                  overflow: 'hidden',
-                  borderRadius: '4px',
-                  border: darkMode ? '1px solid #666' : '1px solid #eee',
-                  gridColumn: images.length === 1 ? 'span 2' : 'span 1',
-                }}
-              >
-                <img
-                  src={imgSrc}
-                  alt={`Preview ${index + 1}`}
+            {allImages.slice(0, 4).map((imgSrc, index) => {
+              const isYouTubeThumbnail = index === 0 && youtubeVideoId && imgSrc.includes('youtube.com');
+              
+              return (
+                <div
+                  key={index}
                   style={{
+                    position: 'relative',
                     width: '100%',
-                    height: '100%',
-                    objectFit: 'cover',
+                    height: allImages.length === 1 ? '120px' : '80px',
+                    overflow: 'hidden',
+                    borderRadius: '4px',
+                    border: darkMode ? '1px solid #666' : '1px solid #eee',
+                    gridColumn: allImages.length === 1 ? 'span 2' : 'span 1',
+                    cursor: isYouTubeThumbnail ? 'pointer' : 'default',
                   }}
-                  onError={(e) => {
-                    e.target.style.display = 'none';
+                  onClick={(e) => {
+                    if (isYouTubeThumbnail) {
+                      e.stopPropagation();
+                      window.open(formatUrl(url), '_blank');
+                    }
                   }}
-                />
-              </div>
-            ))}
+                >
+                  <img
+                    src={imgSrc}
+                    alt={isYouTubeThumbnail ? 'YouTube Video' : `Preview ${index + 1}`}
+                    style={{
+                      width: '100%',
+                      height: '100%',
+                      objectFit: 'cover',
+                    }}
+                    onError={(e) => {
+                      e.target.style.display = 'none';
+                    }}
+                  />
+                  {/* YouTube Play Button Overlay */}
+                  {isYouTubeThumbnail && (
+                    <div
+                      style={{
+                        position: 'absolute',
+                        top: '50%',
+                        left: '50%',
+                        transform: 'translate(-50%, -50%)',
+                        backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                        borderRadius: '50%',
+                        width: '30px',
+                        height: '30px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: 'white',
+                        fontSize: '14px',
+                        pointerEvents: 'none',
+                      }}
+                    >
+                      ▶
+                    </div>
+                  )}
+                </div>
+              );
+            })}
             
             {/* Show additional images count if more than 4 */}
-            {images.length > 4 && (
+            {allImages.length > 4 && (
               <div
                 style={{
                   display: 'flex',
@@ -287,13 +597,13 @@ const CustomNode = ({ data }) => {
                   border: darkMode ? '1px solid #666' : '1px solid #eee',
                 }}
               >
-                +{images.length - 4}
+                +{allImages.length - 4}
               </div>
             )}
           </div>
           
           {/* Show total count if more than 4 images */}
-          {images.length > 4 && (
+          {allImages.length > 4 && (
             <div
               style={{
                 fontSize: '10px',
@@ -301,7 +611,7 @@ const CustomNode = ({ data }) => {
                 textAlign: 'center',
               }}
             >
-              {images.length} images total
+              {allImages.length} images total
             </div>
           )}
         </div>
@@ -326,12 +636,17 @@ const CustomNode = ({ data }) => {
               e.stopPropagation();
             }}
           >
-            {url}
+            {url} {isYouTubeUrl(url) && '📹'}
           </a>
         </div>
       )}
 
-      {note && <div style={textMutedStyles}>{note}</div>} 
+      {note && (
+        <div 
+          style={textMutedStyles}
+          dangerouslySetInnerHTML={{ __html: parseMarkdown(note) }}
+        />
+      )} 
 
       {files && files.length > 0 && (
         <div style={{ marginTop: '8px', borderTop: darkMode ? '1px solid #555' : '1px solid #eee', paddingTop: '8px' }}>
@@ -345,6 +660,7 @@ const CustomNode = ({ data }) => {
                   href={file.dataURL}
                   download={file.name}
                   style={linkStyles}
+                  onClick={(e) => e.stopPropagation()}
                 >
                   📄 {file.name} ({Math.round(file.size / 1024)} KB)
                 </a>

@@ -30,9 +30,6 @@ const flowAPI = {
   loadFlow: (userId) =>
     api.get(`/api/flow/load/${userId}`),
   
-  addNode: (userId, node) =>
-    api.post('/api/flow/node', { user_id: userId, node }),
-  
   deleteNode: (userId, nodeId) =>
     api.delete(`/api/flow/node/${userId}/${nodeId}`),
   
@@ -53,8 +50,8 @@ const initialNodes = [
       url: 'https://reactflow.dev/docs/guides/overview/',
       note: 'Images in this node should now stack vertically.',
       images: [
-        'https://via.placeholder.com/150/FF5733/FFFFFF?text=Image+1',
-        'https://via.placeholder.com/150/33FF57/FFFFFF?text=Image+2',
+        'https://th.bing.com/th/id/OIP.uG0-XW0Ut4DB5Vk4shQ2WQAAAA?o=7rm=3&rs=1&pid=ImgDetMain&o=7&rm=3',
+        'https://tse2.mm.bing.net/th/id/OIP.Z_sV-y1tY_HdTzhoNi5-yAHaE8?rs=1&pid=ImgDetMain&o=7&rm=3',
         'https://via.placeholder.com/150/3357FF/FFFFFF?text=Image+3'
       ],
       files: [],
@@ -129,6 +126,11 @@ function App() {
     images: [],
     files: [],
   });
+  
+  // const handleManualSave = useCallback( () => {
+  //  saveFlowData();
+  // }, [saveFlowData]);
+
 
   // Check backend connection
   const checkBackendConnection = useCallback(async () => {
@@ -439,9 +441,9 @@ function App() {
   );
 
   // Manual save function (for save button if needed)
-  const handleManualSave = useCallback(async () => {
-    await saveFlowData();
-  }, [saveFlowData]);
+  // const handleManualSave = useCallback(async () => {
+  //   await saveFlowData();
+  // }, [saveFlowData]);
 
   // Retry connection function
   const retryConnection = useCallback(async () => {
@@ -507,7 +509,7 @@ function App() {
           // Connection status props
           isOnline={isOnline}
           saveStatus={saveStatus}
-          onManualSave={handleManualSave}
+          // onManualSave={handleManualSave}
           onRetryConnection={retryConnection}
           // Pass theme styles to TopBar
           topBarBackground={topBarBackground}

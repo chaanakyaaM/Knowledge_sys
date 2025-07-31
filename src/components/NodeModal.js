@@ -1,3 +1,5 @@
+import { useState } from 'react';
+
 const NodeModal = ({
   isOpen,
   onClose,
@@ -19,6 +21,9 @@ const NodeModal = ({
   buttonBackgroundSecondary,
   buttonColorSecondary,
 }) => {
+  const [imageUrl, setImageUrl] = useState('');
+  const [imageUrlError, setImageUrlError] = useState('');
+
   if (!isOpen) {
     return null;
   }
@@ -33,6 +38,49 @@ const NodeModal = ({
     
     // Call the original handleSubmit with the enhanced data
     handleSubmit(nodeDataWithTimestamp);
+  };
+
+const handleAddImageFromUrl = () => {
+  const trimmedUrl = imageUrl.trim();
+
+  if (!trimmedUrl) {
+    setImageUrlError('Please enter a valid image URL');
+    return;
+  }
+
+  const img = new Image();
+
+  img.onload = () => {
+    // Add image URL to form data
+    const currentImages = formData.images || [];
+    const updatedImages = [...currentImages, trimmedUrl];
+
+    // Trigger the change handler
+    handleInputChange({
+      target: {
+        name: 'images',
+        value: updatedImages
+      }
+    });
+
+    setImageUrl('');
+    setImageUrlError('');
+  };
+
+  img.onerror = () => {
+    setImageUrlError('Unable to load image from this URL. Please check the URL and try again.');
+  };
+
+  img.src = trimmedUrl;
+};
+
+
+  // Handle Enter key press in URL input
+  const handleUrlKeyPress = (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      handleAddImageFromUrl();
+    }
   };
 
   return (
@@ -134,7 +182,7 @@ const NodeModal = ({
                 fontWeight: '500',
               }}
             >
-              Note/Description
+              Notes (markdown supported)
             </label>
             <textarea
               name="note"
@@ -156,7 +204,7 @@ const NodeModal = ({
             />
           </div>
 
-          {/* Multiple Images Selection with 2x2 Grid Preview */}
+          {/* Enhanced Images Section with URL and Local File Support */}
           <div style={{ marginBottom: '16px' }}>
             <label
               style={{
@@ -166,26 +214,129 @@ const NodeModal = ({
                 fontWeight: '500',
               }}
             >
-              Images (Multiple)
+              Images
             </label>
-            <input
-              type="file"
-              accept="image/*"
-              multiple
-              onChange={handleImageUpload}
-              style={{ fontSize: '14px', color: inputColor }}
-            />
+            
+            {/* Image URL Input */}
+            <div style={{ marginBottom: '12px' }}>
+              <div style={{ 
+                display: 'flex', 
+                gap: '8px', 
+                alignItems: 'flex-start',
+                marginBottom: '4px' 
+              }}>
+                <input
+                  type="text"
+                  placeholder="Enter image URL "
+                  value={imageUrl}
+                  onChange={(e) => {
+                    setImageUrl(e.target.value);
+                    setImageUrlError(''); // Clear error when typing
+                  }}
+                  onKeyPress={handleUrlKeyPress}
+                  style={{
+                    flex: 1,
+                    padding: '8px',
+                    border: imageUrlError ? '2px solid #ff6b6b' : inputBorder,
+                    borderRadius: '6px',
+                    fontSize: '14px',
+                    boxSizing: 'border-box',
+                    color: inputColor,
+                    backgroundColor: inputBackground
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={handleAddImageFromUrl}
+                  style={{
+                    padding: '8px 12px',
+                    backgroundColor: buttonBackgroundPrimary,
+                    color: buttonColorPrimary,
+                    border: 'none',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    fontSize: '12px',
+                    fontWeight: '500',
+                    whiteSpace: 'nowrap'
+                  }}
+                >
+                  Add URL
+                </button>
+              </div>
+              
+              {imageUrlError && (
+                <div style={{
+                  fontSize: '12px',
+                  color: '#ff6b6b',
+                  marginTop: '4px'
+                }}>
+                  {imageUrlError}
+                </div>
+              )}
+              
+              <div style={{
+                fontSize: '12px',
+                color: darkMode ? '#888' : '#666',
+                fontStyle: 'italic'
+              }}>
+                Enter image URL and press Enter or click "Add URL"
+              </div>
+            </div>
 
-            {formData.images.length > 0 && (
+            {/* Local File Upload */}
+            <div style={{ marginBottom: '12px' }}>
+              <div style={{
+                fontSize: '12px',
+                color: darkMode ? '#bbb' : '#666',
+                marginBottom: '4px'
+              }}>
+                Or upload from your device:
+              </div>
+              <input
+                type="file"
+                accept="image/*"
+                multiple
+                onChange={handleImageUpload}
+                style={{ 
+                  fontSize: '14px', 
+                  color: inputColor,
+                  width: '100%'
+                }}
+              />
+            </div>
+
+            {/* Images Preview */}
+            {formData.images && formData.images.length > 0 && (
               <div style={{ marginTop: '12px' }}>
                 <div
                   style={{
                     fontSize: '12px',
                     color: darkMode ? '#bbb' : '#666',
                     marginBottom: '8px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px'
                   }}
                 >
-                  Preview ({formData.images.length} images):
+                  <span>Preview ({formData.images.length} images):</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handleInputChange({
+                        target: { name: 'images', value: [] }
+                      });
+                    }}
+                    style={{
+                      fontSize: '10px',
+                      color: '#ff6b6b',
+                      background: 'none',
+                      border: 'none',
+                      cursor: 'pointer',
+                      textDecoration: 'underline'
+                    }}
+                  >
+                    Clear all
+                  </button>
                 </div>
                 <div
                   style={{
@@ -218,8 +369,28 @@ const NodeModal = ({
                         }}
                         onError={(e) => {
                           e.target.style.display = 'none';
+                          e.target.nextSibling.style.display = 'flex';
                         }}
                       />
+                      <div
+                        style={{
+                          position: 'absolute',
+                          top: 0,
+                          left: 0,
+                          right: 0,
+                          bottom: 0,
+                          display: 'none',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          backgroundColor: darkMode ? '#333' : '#f0f0f0',
+                          color: darkMode ? '#bbb' : '#666',
+                          fontSize: '12px',
+                          textAlign: 'center',
+                          padding: '8px'
+                        }}
+                      >
+                        Failed to load image
+                      </div>
                       <button
                         onClick={() => removeImage(index)}
                         style={{
@@ -242,6 +413,23 @@ const NodeModal = ({
                       >
                         ×
                       </button>
+                      {/* URL indicator */}
+                      {typeof imgSrc === 'string' && imgSrc.startsWith('http') && (
+                        <div
+                          style={{
+                            position: 'absolute',
+                            bottom: '2px',
+                            left: '2px',
+                            backgroundColor: 'rgba(0,0,0,0.7)',
+                            color: 'white',
+                            fontSize: '10px',
+                            padding: '2px 4px',
+                            borderRadius: '2px'
+                          }}
+                        >
+                          URL
+                        </div>
+                      )}
                     </div>
                   ))}
                   
@@ -309,6 +497,23 @@ const NodeModal = ({
                           >
                             ×
                           </button>
+                          {/* URL indicator for small images */}
+                          {typeof imgSrc === 'string' && imgSrc.startsWith('http') && (
+                            <div
+                              style={{
+                                position: 'absolute',
+                                bottom: '1px',
+                                left: '1px',
+                                backgroundColor: 'rgba(0,0,0,0.7)',
+                                color: 'white',
+                                fontSize: '8px',
+                                padding: '1px 2px',
+                                borderRadius: '1px'
+                              }}
+                            >
+                              URL
+                            </div>
+                          )}
                         </div>
                       ))}
                     </div>
@@ -337,7 +542,7 @@ const NodeModal = ({
               style={{ fontSize: '14px', color: inputColor }}
             />
 
-            {formData.files.length > 0 && (
+            {formData.files && formData.files.length > 0 && (
               <div style={{ marginTop: '12px' }}>
                 <div
                   style={{
